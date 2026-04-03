@@ -1,10 +1,7 @@
 name: Terraform Apply
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "terraform/**"
+  workflow_dispatch:  # Manual trigger only — Databricks provider requires workspace credentials
 
 permissions:
   contents: read
