@@ -280,31 +280,144 @@ You should see:
 - Lambda logs showing "Fetched ~15000 vehicle positions"
 - gzipped JSON files appearing in S3 every ~60 seconds
 
-### Step 9: Load GTFS reference data (Databricks)
+### Step 9: Configure Databricks S3 Access
 
-Before the Silver layer can enrich data, you need GTFS reference tables:
+Databricks needs an IAM role to read from your S3 buckets. This involves three pieces:
 
-1. Open your Databricks workspace
-2. Import `databricks/batch/load_gtfs_schedules.py` as a notebook
-3. Run it — this downloads SPTrans GTFS and populates:
-   - `transit_monitor.reference.gtfs_routes`
-   - `transit_monitor.reference.gtfs_stops`
-   - `transit_monitor.reference.gtfs_stop_times`
-   - `transit_monitor.reference.gtfs_shapes`
-   - `transit_monitor.reference.gtfs_trips`
+**a) Create an IAM role for Databricks:**
 
-### Step 10: Start streaming jobs (Databricks)
+```bash
+# Get the external ID from your Databricks managed storage credential
+# (visible in Unity Catalog → External Data → Storage Credentials)
 
-The Terraform Databricks module creates the jobs, but you can also start them manually:
+aws iam create-role \
+  --role-name databricks-transit-monitor-s3 \
+  --assume-role-policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [{
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": [
+          "<DATABRICKS_ROLE_ARN>",
+          "<UNITY_CATALOG_MASTER_ROLE_ARN>",
+          "arn:aws:iam::<YOUR_ACCOUNT_ID>:role/databricks-transit-monitor-s3"
+        ]
+      },
+      "Action": "sts:AssumeRole",
+      "Condition": {
+        "StringEquals": {"sts:ExternalId": "<YOUR_EXTERNAL_ID>"}
+      }
+    }]
+  }'
 
-1. **Bronze ingest** — Run `databricks/streaming/bronze/ingest_from_s3.py` as a continuous job
-2. **Silver enrichment** — Run `databricks/streaming/silver/clean_enrich_gps.py`
-3. **Silver stop arrivals** — Run `databricks/streaming/silver/stop_arrival_detection.py`
-4. **Gold metrics** — Run the gold jobs (on_time, headway, speed)
+# Attach S3 access policy
+aws iam put-role-policy \
+  --role-name databricks-transit-monitor-s3 \
+  --policy-name transit-monitor-s3-access \
+  --policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [{
+      "Effect": "Allow",
+      "Action": ["s3:GetObject","s3:PutObject","s3:DeleteObject","s3:ListBucket","s3:GetBucketLocation"],
+      "Resource": [
+        "arn:aws:s3:::transit-monitor-raw", "arn:aws:s3:::transit-monitor-raw/*",
+        "arn:aws:s3:::transit-monitor-checkpoints", "arn:aws:s3:::transit-monitor-checkpoints/*"
+      ]
+    }]
+  }'
 
-### Step 11: Create dashboards
+# Self-assume permission (required by Unity Catalog)
+aws iam put-role-policy \
+  --role-name databricks-transit-monitor-s3 \
+  --policy-name self-assume \
+  --policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [{
+      "Effect": "Allow",
+      "Action": "sts:AssumeRole",
+      "Resource": "arn:aws:iam::<YOUR_ACCOUNT_ID>:role/databricks-transit-monitor-s3"
+    }]
+  }'
+```
 
-1. Go to **Databricks SQL** → **Queries**
+**b) Register in Databricks Unity Catalog:**
+
+```sql
+-- Create storage credential (via Databricks UI or API)
+-- Then create external locations:
+CREATE EXTERNAL LOCATION `transit-monitor-raw`
+  URL 's3://transit-monitor-raw/'
+  WITH (STORAGE CREDENTIAL `transit-monitor-s3`);
+
+CREATE EXTERNAL LOCATION `transit-monitor-checkpoints`
+  URL 's3://transit-monitor-checkpoints/'
+  WITH (STORAGE CREDENTIAL `transit-monitor-s3`);
+```
+
+**c) Create Unity Catalog schemas:**
+
+```sql
+CREATE CATALOG IF NOT EXISTS transit_monitor;
+CREATE SCHEMA IF NOT EXISTS transit_monitor.bronze;
+CREATE SCHEMA IF NOT EXISTS transit_monitor.silver;
+CREATE SCHEMA IF NOT EXISTS transit_monitor.gold;
+CREATE SCHEMA IF NOT EXISTS transit_monitor.reference;
+```
+
+### Step 10: Load GTFS Reference Data
+
+Upload the GTFS data to S3 and load via SQL warehouse:
+
+```bash
+# Download GTFS locally and upload to S3
+curl -L -o /tmp/gtfs.zip "https://www.sptrans.com.br/umbraco/Surface/PerfilDesenvolvedor/BaixarGTFS"
+unzip /tmp/gtfs.zip -d /tmp/gtfs
+aws s3 sync /tmp/gtfs/ s3://transit-monitor-raw/gtfs/
+```
+
+Then run in the Databricks SQL editor:
+
+```sql
+CREATE OR REPLACE TABLE transit_monitor.reference.gtfs_routes AS
+  SELECT *, regexp_extract(route_id, '([0-9]+)', 1)::INT as line_code, current_timestamp() as _loaded_at
+  FROM read_files('s3://transit-monitor-raw/gtfs/routes.txt', format => 'csv', header => 'true');
+
+CREATE OR REPLACE TABLE transit_monitor.reference.gtfs_stops AS
+  SELECT *, current_timestamp() as _loaded_at
+  FROM read_files('s3://transit-monitor-raw/gtfs/stops.txt', format => 'csv', header => 'true');
+
+CREATE OR REPLACE TABLE transit_monitor.reference.gtfs_trips AS
+  SELECT *, current_timestamp() as _loaded_at
+  FROM read_files('s3://transit-monitor-raw/gtfs/trips.txt', format => 'csv', header => 'true');
+
+CREATE OR REPLACE TABLE transit_monitor.reference.gtfs_stop_times AS
+  SELECT st.*, t.route_id, current_timestamp() as _loaded_at
+  FROM read_files('s3://transit-monitor-raw/gtfs/stop_times.txt', format => 'csv', header => 'true') st
+  JOIN transit_monitor.reference.gtfs_trips t ON st.trip_id = t.trip_id;
+
+CREATE OR REPLACE TABLE transit_monitor.reference.gtfs_shapes AS
+  SELECT *, current_timestamp() as _loaded_at
+  FROM read_files('s3://transit-monitor-raw/gtfs/shapes.txt', format => 'csv', header => 'true');
+```
+
+### Step 11: Run the Medallion Pipeline
+
+**With a classic cluster (streaming mode):**
+
+The Terraform Databricks module creates continuous streaming jobs. Start them in order:
+
+1. **Bronze ingest** — `databricks/streaming/bronze/ingest_from_s3.py` (Auto Loader: S3 -> Delta)
+2. **Silver enrichment** — `databricks/streaming/silver/clean_enrich_gps.py` (clean, dedup, enrich)
+3. **Silver stop arrivals** — `databricks/streaming/silver/stop_arrival_detection.py`
+4. **Gold metrics** — on_time, headway, speed, fleet jobs
+
+**With a serverless SQL warehouse (batch mode):**
+
+If running on the free trial without classic clusters, run the pipeline as batch SQL. See `dashboards/queries/` for the SQL transformations that build each layer.
+
+### Step 12: Create Dashboards
+
+1. Go to **Databricks SQL** -> **Queries**
 2. Create 5 queries using the SQL files in `dashboards/queries/`
 3. Create a dashboard and add visualizations from each query
 
@@ -352,6 +465,29 @@ The Terraform Databricks module creates the jobs, but you can also start them ma
 | **Total** | **~$140–200** |
 
 See [docs/cost_estimate.md](docs/cost_estimate.md) for detailed breakdown and optimization strategies.
+
+---
+
+## Pipeline Results
+
+With data from the SP bus network (sample run):
+
+| Layer | Table | Rows | Description |
+|---|---|---|---|
+| **Reference** | `gtfs_routes` | 1,347 | Bus route definitions |
+| | `gtfs_stops` | 21,536 | Physical stop locations |
+| | `gtfs_trips` | 2,003 | Scheduled trip definitions |
+| | `gtfs_stop_times` | 88,701 | Scheduled arrival/departure times |
+| | `gtfs_shapes` | 1,015,143 | Route geometry points |
+| **Bronze** | `sptrans_gps_raw` | 403,655 | Raw GPS positions from S3 |
+| **Silver** | `vehicle_positions_enriched` | 418,611 | Cleaned, deduplicated, GTFS-enriched |
+| | `stop_arrivals` | 527,918 | Detected stop arrival events |
+| **Gold** | `speed_congestion` | 2,156 | Speed/congestion by route and hour |
+| | `fleet_utilization` | 4,292 | Active vehicles vs planned trips |
+| | `headway_regularity` | 28,425 | Bus bunching metrics by stop |
+| | `on_time_performance` | 14 | Schedule adherence by route |
+
+**Data volumes:** ~15,000 vehicles reporting every ~30 seconds, producing ~900K-1.8M rows/hour.
 
 ---
 

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sptrans_producer.models import (
     ApiLine,
@@ -38,7 +38,7 @@ def _make_api_response(num_lines: int = 2, vehicles_per_line: int = 3) -> ApiPos
 class TestNormalizePositions:
     def test_flattens_nested_response(self):
         response = _make_api_response(num_lines=2, vehicles_per_line=3)
-        ingestion_time = datetime(2026, 3, 14, 15, 30, 0, tzinfo=timezone.utc)
+        ingestion_time = datetime(2026, 3, 14, 15, 30, 0, tzinfo=UTC)
 
         positions = normalize_positions(response, ingestion_time)
 
@@ -46,7 +46,7 @@ class TestNormalizePositions:
 
     def test_maps_fields_correctly(self):
         response = _make_api_response(num_lines=1, vehicles_per_line=1)
-        ingestion_time = datetime(2026, 3, 14, 15, 30, 0, tzinfo=timezone.utc)
+        ingestion_time = datetime(2026, 3, 14, 15, 30, 0, tzinfo=UTC)
 
         positions = normalize_positions(response, ingestion_time)
         pos = positions[0]
@@ -63,7 +63,7 @@ class TestNormalizePositions:
 
     def test_empty_response(self):
         response = ApiPositionResponse(hr="15:30", l=[])
-        ingestion_time = datetime(2026, 3, 14, 15, 30, 0, tzinfo=timezone.utc)
+        ingestion_time = datetime(2026, 3, 14, 15, 30, 0, tzinfo=UTC)
 
         positions = normalize_positions(response, ingestion_time)
 
@@ -74,7 +74,7 @@ class TestNormalizePositions:
             hr="15:30",
             l=[ApiLine(c="8001-10", cl=33000, sl=1, lt0="A", lt1="B", vs=[])],
         )
-        ingestion_time = datetime(2026, 3, 14, 15, 30, 0, tzinfo=timezone.utc)
+        ingestion_time = datetime(2026, 3, 14, 15, 30, 0, tzinfo=UTC)
 
         positions = normalize_positions(response, ingestion_time)
 

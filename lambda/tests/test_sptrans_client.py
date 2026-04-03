@@ -27,8 +27,11 @@ SAMPLE_POSITION_RESPONSE = {
 TEST_CONFIG = Config(
     sptrans_api_base_url="https://api.test.sptrans.com.br/v2.1",
     sptrans_api_token="test-token-123",
+    output_mode="kinesis",
     kinesis_stream_name="test-stream",
     kinesis_batch_size=500,
+    s3_raw_bucket="",
+    s3_prefix="",
     aws_region="us-east-1",
 )
 

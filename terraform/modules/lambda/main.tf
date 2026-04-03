@@ -3,14 +3,34 @@ variable "project_name" {
   type        = string
 }
 
+variable "output_mode" {
+  description = "Where Lambda writes records: 's3' (direct) or 'kinesis'"
+  type        = string
+  default     = "s3"
+}
+
 variable "kinesis_stream_name" {
   description = "Kinesis Data Stream name for the producer to write to"
   type        = string
+  default     = ""
 }
 
 variable "kinesis_stream_arn" {
   description = "Kinesis Data Stream ARN"
   type        = string
+  default     = ""
+}
+
+variable "s3_raw_bucket_name" {
+  description = "S3 bucket name for direct writes (when output_mode=s3)"
+  type        = string
+  default     = ""
+}
+
+variable "s3_raw_bucket_arn" {
+  description = "S3 bucket ARN for direct writes"
+  type        = string
+  default     = ""
 }
 
 variable "lambda_code_bucket" {
@@ -83,14 +103,29 @@ data "aws_iam_policy_document" "lambda_policy" {
     resources = ["arn:aws:logs:*:*:*"]
   }
 
-  # Write to Kinesis
-  statement {
-    effect = "Allow"
-    actions = [
-      "kinesis:PutRecord",
-      "kinesis:PutRecords",
-    ]
-    resources = [var.kinesis_stream_arn]
+  # Write to Kinesis (when output_mode=kinesis)
+  dynamic "statement" {
+    for_each = var.output_mode == "kinesis" ? [1] : []
+    content {
+      effect = "Allow"
+      actions = [
+        "kinesis:PutRecord",
+        "kinesis:PutRecords",
+      ]
+      resources = [var.kinesis_stream_arn]
+    }
+  }
+
+  # Write to S3 (when output_mode=s3)
+  dynamic "statement" {
+    for_each = var.output_mode == "s3" ? [1] : []
+    content {
+      effect = "Allow"
+      actions = [
+        "s3:PutObject",
+      ]
+      resources = ["${var.s3_raw_bucket_arn}/*"]
+    }
   }
 
   # Read SSM Parameter
@@ -124,8 +159,11 @@ resource "aws_lambda_function" "sptrans_producer" {
   environment {
     variables = {
       SPTRANS_API_TOKEN    = var.sptrans_api_token
-      KINESIS_STREAM_NAME  = var.kinesis_stream_name
       SPTRANS_API_BASE_URL = "https://api.olhovivo.sptrans.com.br/v2.1"
+      OUTPUT_MODE          = var.output_mode
+      KINESIS_STREAM_NAME  = var.kinesis_stream_name
+      S3_RAW_BUCKET        = var.s3_raw_bucket_name
+      S3_PREFIX            = "sptrans-gps"
     }
   }
 

@@ -44,11 +44,11 @@ module "storage" {
 # --- Kinesis ---
 
 module "kinesis" {
-  source        = "../../modules/kinesis"
-  project_name  = var.project_name
+  source         = "../../modules/kinesis"
+  project_name   = var.project_name
   raw_bucket_arn = module.storage.raw_bucket_arn
   raw_bucket_id  = module.storage.raw_bucket_id
-  tags          = local.common_tags
+  tags           = local.common_tags
 }
 
 # --- Lambda ---
@@ -56,6 +56,7 @@ module "kinesis" {
 module "lambda" {
   source              = "../../modules/lambda"
   project_name        = var.project_name
+  output_mode         = "kinesis"
   kinesis_stream_name = module.kinesis.stream_name
   kinesis_stream_arn  = module.kinesis.stream_arn
   lambda_code_bucket  = module.storage.lambda_code_bucket_name
@@ -74,11 +75,12 @@ module "monitoring" {
   tags                 = local.common_tags
 }
 
-# --- Databricks (deploy later to use free trial) ---
-# module "databricks" {
-#   source                 = "../../modules/databricks"
-#   project_name           = var.project_name
-#   raw_bucket_name        = module.storage.raw_bucket_name
-#   checkpoints_bucket_name = module.storage.checkpoints_bucket_name
-#   tags                   = local.common_tags
-# }
+# --- Databricks ---
+
+module "databricks" {
+  source                  = "../../modules/databricks"
+  project_name            = var.project_name
+  raw_bucket_name         = module.storage.raw_bucket_name
+  checkpoints_bucket_name = module.storage.checkpoints_bucket_name
+  tags                    = local.common_tags
+}

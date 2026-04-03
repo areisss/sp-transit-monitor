@@ -48,7 +48,7 @@ class ApiPositionResponse(BaseModel):
     """Top-level SPTrans /Posicao response."""
 
     hr: str  # reference time
-    l: list[ApiLine] = Field(default_factory=list)  # lines
+    l: list[ApiLine] = Field(default_factory=list)  # lines  # noqa: E741
 
 
 def normalize_positions(response: ApiPositionResponse, ingestion_time: datetime) -> list[VehiclePosition]:
