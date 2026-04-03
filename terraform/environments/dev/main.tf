@@ -88,3 +88,4 @@ module "databricks" {
   checkpoints_bucket_name = module.storage.checkpoints_bucket_name
   tags                    = local.common_tags
 }
+
