@@ -7,7 +7,6 @@ into Unity Catalog reference tables. Runs daily at 03:00 UTC.
 SPTrans GTFS feed: http://www.sptrans.com.br/developers/
 """
 
-import sys
 import tempfile
 import zipfile
 
@@ -30,46 +29,56 @@ STOP_TIMES_TABLE = "transit_monitor.reference.gtfs_stop_times"
 SHAPES_TABLE = "transit_monitor.reference.gtfs_shapes"
 TRIPS_TABLE = "transit_monitor.reference.gtfs_trips"
 
-ROUTES_SCHEMA = StructType([
-    StructField("route_id", StringType(), nullable=False),
-    StructField("agency_id", StringType(), nullable=True),
-    StructField("route_short_name", StringType(), nullable=True),
-    StructField("route_long_name", StringType(), nullable=True),
-    StructField("route_type", IntegerType(), nullable=True),
-    StructField("route_color", StringType(), nullable=True),
-    StructField("route_text_color", StringType(), nullable=True),
-])
+ROUTES_SCHEMA = StructType(
+    [
+        StructField("route_id", StringType(), nullable=False),
+        StructField("agency_id", StringType(), nullable=True),
+        StructField("route_short_name", StringType(), nullable=True),
+        StructField("route_long_name", StringType(), nullable=True),
+        StructField("route_type", IntegerType(), nullable=True),
+        StructField("route_color", StringType(), nullable=True),
+        StructField("route_text_color", StringType(), nullable=True),
+    ]
+)
 
-STOPS_SCHEMA = StructType([
-    StructField("stop_id", StringType(), nullable=False),
-    StructField("stop_name", StringType(), nullable=True),
-    StructField("stop_lat", DoubleType(), nullable=False),
-    StructField("stop_lon", DoubleType(), nullable=False),
-])
+STOPS_SCHEMA = StructType(
+    [
+        StructField("stop_id", StringType(), nullable=False),
+        StructField("stop_name", StringType(), nullable=True),
+        StructField("stop_lat", DoubleType(), nullable=False),
+        StructField("stop_lon", DoubleType(), nullable=False),
+    ]
+)
 
-STOP_TIMES_SCHEMA = StructType([
-    StructField("trip_id", StringType(), nullable=False),
-    StructField("arrival_time", StringType(), nullable=True),
-    StructField("departure_time", StringType(), nullable=True),
-    StructField("stop_id", StringType(), nullable=False),
-    StructField("stop_sequence", IntegerType(), nullable=True),
-])
+STOP_TIMES_SCHEMA = StructType(
+    [
+        StructField("trip_id", StringType(), nullable=False),
+        StructField("arrival_time", StringType(), nullable=True),
+        StructField("departure_time", StringType(), nullable=True),
+        StructField("stop_id", StringType(), nullable=False),
+        StructField("stop_sequence", IntegerType(), nullable=True),
+    ]
+)
 
-SHAPES_SCHEMA = StructType([
-    StructField("shape_id", StringType(), nullable=False),
-    StructField("shape_pt_lat", DoubleType(), nullable=False),
-    StructField("shape_pt_lon", DoubleType(), nullable=False),
-    StructField("shape_pt_sequence", IntegerType(), nullable=False),
-])
+SHAPES_SCHEMA = StructType(
+    [
+        StructField("shape_id", StringType(), nullable=False),
+        StructField("shape_pt_lat", DoubleType(), nullable=False),
+        StructField("shape_pt_lon", DoubleType(), nullable=False),
+        StructField("shape_pt_sequence", IntegerType(), nullable=False),
+    ]
+)
 
-TRIPS_SCHEMA = StructType([
-    StructField("route_id", StringType(), nullable=False),
-    StructField("service_id", StringType(), nullable=True),
-    StructField("trip_id", StringType(), nullable=False),
-    StructField("trip_headsign", StringType(), nullable=True),
-    StructField("direction_id", IntegerType(), nullable=True),
-    StructField("shape_id", StringType(), nullable=True),
-])
+TRIPS_SCHEMA = StructType(
+    [
+        StructField("route_id", StringType(), nullable=False),
+        StructField("service_id", StringType(), nullable=True),
+        StructField("trip_id", StringType(), nullable=False),
+        StructField("trip_headsign", StringType(), nullable=True),
+        StructField("direction_id", IntegerType(), nullable=True),
+        StructField("shape_id", StringType(), nullable=True),
+    ]
+)
 
 
 def download_gtfs(url: str, dest_dir: str) -> str:
@@ -90,12 +99,7 @@ def download_gtfs(url: str, dest_dir: str) -> str:
 
 def load_gtfs_csv(spark: SparkSession, path: str, schema: StructType) -> "DataFrame":
     """Read a GTFS CSV file with the given schema."""
-    return (
-        spark.read
-        .option("header", "true")
-        .schema(schema)
-        .csv(path)
-    )
+    return spark.read.option("header", "true").schema(schema).csv(path)
 
 
 def add_line_code_to_routes(routes_df: "DataFrame") -> "DataFrame":
@@ -106,14 +110,9 @@ def add_line_code_to_routes(routes_df: "DataFrame") -> "DataFrame":
     )
 
 
-def add_route_id_to_stop_times(
-    stop_times_df: "DataFrame", trips_df: "DataFrame"
-) -> "DataFrame":
+def add_route_id_to_stop_times(stop_times_df: "DataFrame", trips_df: "DataFrame") -> "DataFrame":
     """Join stop_times with trips to get route_id for each stop_time row."""
-    return (
-        stop_times_df
-        .join(trips_df.select("trip_id", "route_id"), "trip_id", "inner")
-    )
+    return stop_times_df.join(trips_df.select("trip_id", "route_id"), "trip_id", "inner")
 
 
 def main() -> None:
@@ -149,17 +148,12 @@ def main() -> None:
         (shapes, SHAPES_TABLE),
         (trips, TRIPS_TABLE),
     ]:
-        (
-            df
-            .withColumn("_loaded_at", load_ts)
-            .write
-            .format("delta")
-            .mode("overwrite")
-            .saveAsTable(table_name)
-        )
+        (df.withColumn("_loaded_at", load_ts).write.format("delta").mode("overwrite").saveAsTable(table_name))
 
-    print(f"GTFS load complete: {routes.count()} routes, {stops.count()} stops, "
-          f"{stop_times.count()} stop_times, {shapes.count()} shapes, {trips.count()} trips")
+    print(
+        f"GTFS load complete: {routes.count()} routes, {stops.count()} stops, "
+        f"{stop_times.count()} stop_times, {shapes.count()} shapes, {trips.count()} trips"
+    )
 
 
 if __name__ == "__main__":

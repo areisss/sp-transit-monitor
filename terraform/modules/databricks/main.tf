@@ -1,3 +1,12 @@
+terraform {
+  required_providers {
+    databricks = {
+      source  = "databricks/databricks"
+      version = "~> 1.0"
+    }
+  }
+}
+
 variable "project_name" {
   description = "Project name for resource naming"
   type        = string

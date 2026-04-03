@@ -40,6 +40,7 @@ line-length = 120
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "SIM", "RUF"]
+ignore = ["N812"]  # Allow `import functions as F` (PySpark convention)
 
 [tool.ruff.lint.isort]
 known-first-party = ["sptrans_producer"]

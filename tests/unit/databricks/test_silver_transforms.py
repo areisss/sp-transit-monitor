@@ -2,7 +2,6 @@
 
 import pytest
 from pyspark.sql import SparkSession
-from pyspark.sql import functions as F
 from pyspark.sql.types import (
     BooleanType,
     DoubleType,
@@ -10,7 +9,6 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
-    TimestampType,
 )
 
 from databricks.streaming.silver.clean_enrich_gps import (
@@ -22,8 +20,7 @@ from databricks.streaming.silver.clean_enrich_gps import (
 @pytest.fixture(scope="module")
 def spark():
     session = (
-        SparkSession.builder
-        .master("local[1]")
+        SparkSession.builder.master("local[1]")
         .appName("test-silver-transforms")
         .config("spark.sql.session.timeZone", "UTC")
         .getOrCreate()
@@ -32,17 +29,19 @@ def spark():
     session.stop()
 
 
-RAW_SCHEMA = StructType([
-    StructField("vehicle_id", StringType()),
-    StructField("line_code", IntegerType()),
-    StructField("line_number", StringType()),
-    StructField("line_direction", IntegerType()),
-    StructField("latitude", DoubleType()),
-    StructField("longitude", DoubleType()),
-    StructField("is_accessible", BooleanType()),
-    StructField("event_timestamp", StringType()),
-    StructField("ingestion_timestamp", StringType()),
-])
+RAW_SCHEMA = StructType(
+    [
+        StructField("vehicle_id", StringType()),
+        StructField("line_code", IntegerType()),
+        StructField("line_number", StringType()),
+        StructField("line_direction", IntegerType()),
+        StructField("latitude", DoubleType()),
+        StructField("longitude", DoubleType()),
+        StructField("is_accessible", BooleanType()),
+        StructField("event_timestamp", StringType()),
+        StructField("ingestion_timestamp", StringType()),
+    ]
+)
 
 
 def _make_raw_df(spark, rows):
@@ -51,10 +50,12 @@ def _make_raw_df(spark, rows):
 
 class TestParseTimestamps:
     def test_converts_string_to_timestamp(self, spark):
-        df = _make_raw_df(spark, [
-            ("V001", 33000, "8001-10", 1, -23.55, -46.63, True,
-             "2026-03-14T15:00:00", "2026-03-14T15:30:00"),
-        ])
+        df = _make_raw_df(
+            spark,
+            [
+                ("V001", 33000, "8001-10", 1, -23.55, -46.63, True, "2026-03-14T15:00:00", "2026-03-14T15:30:00"),
+            ],
+        )
 
         result = parse_timestamps(df)
 
@@ -85,7 +86,7 @@ class TestFilterSpBounds:
                 (-23.55, -46.63),  # valid SP
                 (-22.91, -43.17),  # Rio de Janeiro
                 (-25.43, -49.27),  # Curitiba
-                (0.0, 0.0),        # null island
+                (0.0, 0.0),  # null island
             ],
             ["latitude", "longitude"],
         )

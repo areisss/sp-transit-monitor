@@ -11,9 +11,8 @@ Produces hourly aggregations of headway statistics by route and stop.
 import argparse
 import sys
 
-from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql import DataFrame, SparkSession, Window
 from pyspark.sql import functions as F
-from pyspark.sql import Window
 from pyspark.sql.types import DateType
 
 sys.path.insert(0, "/Workspace/repos/sp-transit-monitor")
@@ -25,15 +24,10 @@ GOLD_TABLE = "transit_monitor.gold.headway_regularity"
 
 def compute_headways(arrivals: DataFrame) -> DataFrame:
     """Compute headway (time between consecutive arrivals) at each stop+route."""
-    window_spec = (
-        Window
-        .partitionBy("stop_id", "line_code")
-        .orderBy("arrival_time")
-    )
+    window_spec = Window.partitionBy("stop_id", "line_code").orderBy("arrival_time")
 
     return (
-        arrivals
-        .withColumn("prev_arrival_time", F.lag("arrival_time").over(window_spec))
+        arrivals.withColumn("prev_arrival_time", F.lag("arrival_time").over(window_spec))
         .withColumn("prev_vehicle_id", F.lag("vehicle_id").over(window_spec))
         .filter(F.col("prev_arrival_time").isNotNull())
         .withColumn(
@@ -48,8 +42,7 @@ def compute_headways(arrivals: DataFrame) -> DataFrame:
 def aggregate_headway_metrics(headways: DataFrame) -> DataFrame:
     """Aggregate headway statistics per route, stop, and time window."""
     return (
-        headways
-        .withColumn("hour_of_day", extract_hour_of_day(F.col("arrival_time")))
+        headways.withColumn("hour_of_day", extract_hour_of_day(F.col("arrival_time")))
         .withColumn("time_period", classify_time_period(F.col("hour_of_day")))
         .withColumn("is_weekday", is_weekday(F.col("arrival_time")))
         .withColumn("_event_date", F.col("arrival_time").cast(DateType()).cast("string"))
@@ -72,8 +65,9 @@ def aggregate_headway_metrics(headways: DataFrame) -> DataFrame:
         )
         .withColumn(
             "headway_cv",
-            F.when(F.col("avg_headway_seconds") > 0, F.col("stddev_headway_seconds") / F.col("avg_headway_seconds"))
-            .otherwise(F.lit(None)),
+            F.when(
+                F.col("avg_headway_seconds") > 0, F.col("stddev_headway_seconds") / F.col("avg_headway_seconds")
+            ).otherwise(F.lit(None)),
         )
         .withColumn(
             "bunching_severity",
@@ -99,20 +93,12 @@ def create_headway_stream(spark: SparkSession, checkpoint_bucket: str) -> None:
         headways = compute_headways(batch_df)
         metrics = aggregate_headway_metrics(headways)
 
-        (
-            metrics.write
-            .format("delta")
-            .mode("append")
-            .partitionBy("_event_date")
-            .saveAsTable(GOLD_TABLE)
-        )
+        (metrics.write.format("delta").mode("append").partitionBy("_event_date").saveAsTable(GOLD_TABLE))
 
     (
-        spark.readStream
-        .table(STOP_ARRIVALS_TABLE)
+        spark.readStream.table(STOP_ARRIVALS_TABLE)
         .withWatermark("arrival_time", "15 minutes")
-        .writeStream
-        .foreachBatch(process_batch)
+        .writeStream.foreachBatch(process_batch)
         .option("checkpointLocation", checkpoint_location)
         .trigger(processingTime="5 minutes")
         .start()

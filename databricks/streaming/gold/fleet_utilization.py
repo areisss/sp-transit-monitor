@@ -11,7 +11,6 @@ from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 
 sys.path.insert(0, "/Workspace/repos/sp-transit-monitor")
-from databricks.utils.time_utils import classify_time_period, extract_hour_of_day
 
 SILVER_TABLE = "transit_monitor.silver.vehicle_positions_enriched"
 GTFS_ROUTES_TABLE = "transit_monitor.reference.gtfs_routes"
@@ -22,8 +21,7 @@ GOLD_TABLE = "transit_monitor.gold.fleet_utilization"
 def compute_actual_fleet(positions: DataFrame, target_date: str) -> DataFrame:
     """Count distinct active vehicles per route on the target date."""
     return (
-        positions
-        .filter(F.col("_event_date") == target_date)
+        positions.filter(F.col("_event_date") == target_date)
         .groupBy("line_code", "line_number")
         .agg(
             F.countDistinct("vehicle_id").alias("actual_vehicles"),
@@ -37,8 +35,7 @@ def compute_actual_fleet(positions: DataFrame, target_date: str) -> DataFrame:
 def compute_planned_trips(gtfs_stop_times: DataFrame, gtfs_routes: DataFrame) -> DataFrame:
     """Count planned trips per route from GTFS schedule."""
     return (
-        gtfs_stop_times
-        .select("route_id", "trip_id")
+        gtfs_stop_times.select("route_id", "trip_id")
         .distinct()
         .groupBy("route_id")
         .agg(F.countDistinct("trip_id").alias("planned_trips"))
@@ -50,9 +47,7 @@ def compute_planned_trips(gtfs_stop_times: DataFrame, gtfs_routes: DataFrame) ->
     )
 
 
-def compute_fleet_utilization(
-    actual: DataFrame, planned: DataFrame, target_date: str
-) -> DataFrame:
+def compute_fleet_utilization(actual: DataFrame, planned: DataFrame, target_date: str) -> DataFrame:
     """Join actual vs planned and compute utilization ratio."""
     return (
         actual.alias("a")
@@ -73,8 +68,9 @@ def compute_fleet_utilization(
         )
         .withColumn(
             "utilization_ratio",
-            F.when(F.col("planned_trips") > 0, F.col("actual_vehicles") / F.col("planned_trips"))
-            .otherwise(F.lit(None)),
+            F.when(F.col("planned_trips") > 0, F.col("actual_vehicles") / F.col("planned_trips")).otherwise(
+                F.lit(None)
+            ),
         )
         .withColumn(
             "status",
@@ -92,9 +88,7 @@ def main() -> None:
     spark = SparkSession.builder.appName("gold-fleet-utilization").getOrCreate()
 
     # Use yesterday as the target date by default
-    target_date = (
-        spark.sql("SELECT date_sub(current_date(), 1) AS d").collect()[0]["d"].isoformat()
-    )
+    target_date = spark.sql("SELECT date_sub(current_date(), 1) AS d").collect()[0]["d"].isoformat()
 
     positions = spark.table(SILVER_TABLE)
     gtfs_stop_times = spark.table(GTFS_STOP_TIMES_TABLE)
@@ -105,8 +99,7 @@ def main() -> None:
     utilization = compute_fleet_utilization(actual, planned, target_date)
 
     (
-        utilization.write
-        .format("delta")
+        utilization.write.format("delta")
         .mode("overwrite")
         .option("replaceWhere", f"_event_date = '{target_date}'")
         .saveAsTable(GOLD_TABLE)

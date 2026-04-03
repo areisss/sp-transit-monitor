@@ -84,20 +84,12 @@ def create_stop_arrival_stream(spark: SparkSession, checkpoint_bucket: str) -> N
 
         arrivals = detect_stop_arrivals(batch_df, gtfs_stops)
 
-        (
-            arrivals.write
-            .format("delta")
-            .mode("append")
-            .partitionBy("_event_date")
-            .saveAsTable(STOP_ARRIVALS_TABLE)
-        )
+        (arrivals.write.format("delta").mode("append").partitionBy("_event_date").saveAsTable(STOP_ARRIVALS_TABLE))
 
     (
-        spark.readStream
-        .table(SILVER_TABLE)
+        spark.readStream.table(SILVER_TABLE)
         .withWatermark("event_ts", "10 minutes")
-        .writeStream
-        .foreachBatch(process_batch)
+        .writeStream.foreachBatch(process_batch)
         .option("checkpointLocation", checkpoint_location)
         .trigger(processingTime="5 minutes")
         .start()

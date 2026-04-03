@@ -28,8 +28,7 @@ GTFS_ROUTES_TABLE = "transit_monitor.reference.gtfs_routes"
 def parse_timestamps(df: DataFrame) -> DataFrame:
     """Parse string timestamps to proper TimestampType columns."""
     return (
-        df
-        .withColumn("event_ts", F.to_timestamp(F.col("event_timestamp")))
+        df.withColumn("event_ts", F.to_timestamp(F.col("event_timestamp")))
         .withColumn("ingestion_ts", F.to_timestamp(F.col("ingestion_timestamp")))
         .drop("event_timestamp", "ingestion_timestamp")
     )
@@ -50,10 +49,8 @@ def enrich_with_gtfs(df: DataFrame, gtfs_routes: DataFrame) -> DataFrame:
         F.col("line_code").alias("gtfs_line_code"),
     )
 
-    return (
-        df
-        .join(F.broadcast(gtfs_slim), df["line_code"] == gtfs_slim["gtfs_line_code"], "left")
-        .drop("gtfs_line_code", "gtfs_route_id")
+    return df.join(F.broadcast(gtfs_slim), df["line_code"] == gtfs_slim["gtfs_line_code"], "left").drop(
+        "gtfs_line_code", "gtfs_route_id"
     )
 
 
@@ -65,8 +62,7 @@ def add_h3_index(df: DataFrame) -> DataFrame:
 def add_time_features(df: DataFrame) -> DataFrame:
     """Add derived time features for downstream analysis."""
     return (
-        df
-        .withColumn("hour_of_day", extract_hour_of_day(F.col("event_ts")))
+        df.withColumn("hour_of_day", extract_hour_of_day(F.col("event_ts")))
         .withColumn("is_weekday", is_weekday(F.col("event_ts")))
         .withColumn("_event_date", F.col("event_ts").cast(DateType()).cast("string"))
     )
@@ -79,8 +75,7 @@ def create_silver_stream(spark: SparkSession, checkpoint_bucket: str) -> None:
     gtfs_routes = spark.table(GTFS_ROUTES_TABLE)
 
     bronze_stream = (
-        spark.readStream
-        .table(BRONZE_TABLE)
+        spark.readStream.table(BRONZE_TABLE)
         .transform(parse_timestamps)
         .withWatermark("event_ts", "10 minutes")
         .dropDuplicatesWithinWatermark(["vehicle_id", "event_ts"])
@@ -92,9 +87,7 @@ def create_silver_stream(spark: SparkSession, checkpoint_bucket: str) -> None:
     )
 
     (
-        bronze_stream
-        .writeStream
-        .format("delta")
+        bronze_stream.writeStream.format("delta")
         .outputMode("append")
         .option("checkpointLocation", checkpoint_location)
         .partitionBy("_event_date")

@@ -11,7 +11,6 @@ import sys
 
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
-from pyspark.sql.types import DateType
 
 sys.path.insert(0, "/Workspace/repos/sp-transit-monitor")
 from databricks.utils.time_utils import classify_time_period, extract_hour_of_day, is_weekday
@@ -24,8 +23,7 @@ GOLD_TABLE = "transit_monitor.gold.coverage_equity"
 def compute_service_frequency(positions: DataFrame, target_date: str) -> DataFrame:
     """Count unique vehicles per H3 hex per hour."""
     return (
-        positions
-        .filter(F.col("_event_date") == target_date)
+        positions.filter(F.col("_event_date") == target_date)
         .withColumn("hour_of_day", extract_hour_of_day(F.col("event_ts")))
         .withColumn("time_period", classify_time_period(F.col("hour_of_day")))
         .withColumn("is_weekday", is_weekday(F.col("event_ts")))
@@ -40,16 +38,12 @@ def compute_service_frequency(positions: DataFrame, target_date: str) -> DataFra
 
 def join_with_census(service_freq: DataFrame, census: DataFrame) -> DataFrame:
     """Join service frequency with census demographics per H3 hex."""
-    census_h3 = (
-        census
-        .groupBy("h3_index")
-        .agg(
-            F.sum("population").alias("population"),
-            F.sum("households").alias("households"),
-            F.avg("avg_income_brl").alias("avg_income_brl"),
-            F.avg("population_density").alias("population_density"),
-            F.first("income_bracket").alias("income_bracket"),
-        )
+    census_h3 = census.groupBy("h3_index").agg(
+        F.sum("population").alias("population"),
+        F.sum("households").alias("households"),
+        F.avg("avg_income_brl").alias("avg_income_brl"),
+        F.avg("population_density").alias("population_density"),
+        F.first("income_bracket").alias("income_bracket"),
     )
 
     return (
@@ -91,10 +85,8 @@ def main() -> None:
     equity = join_with_census(service_freq, census)
 
     (
-        equity
-        .withColumn("_event_date", F.lit(target_date))
-        .write
-        .format("delta")
+        equity.withColumn("_event_date", F.lit(target_date))
+        .write.format("delta")
         .mode("overwrite")
         .option("replaceWhere", f"_event_date = '{target_date}'")
         .saveAsTable(GOLD_TABLE)

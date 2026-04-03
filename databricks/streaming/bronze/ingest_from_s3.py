@@ -24,8 +24,7 @@ def create_bronze_stream(spark: SparkSession, raw_bucket: str, checkpoint_bucket
     checkpoint_location = f"s3://{checkpoint_bucket}/bronze/sptrans_gps/"
 
     (
-        spark.readStream
-        .format("cloudFiles")
+        spark.readStream.format("cloudFiles")
         .option("cloudFiles.format", "json")
         .option("cloudFiles.schemaLocation", schema_location)
         .option("cloudFiles.useNotifications", "true")
@@ -34,8 +33,7 @@ def create_bronze_stream(spark: SparkSession, raw_bucket: str, checkpoint_bucket
         .withColumn("_bronze_ingested_at", F.current_timestamp())
         .withColumn("_event_date", F.to_date(F.col("event_timestamp")))
         .withColumn("_source_file", F.input_file_name())
-        .writeStream
-        .format("delta")
+        .writeStream.format("delta")
         .outputMode("append")
         .option("checkpointLocation", checkpoint_location)
         .option("mergeSchema", "true")

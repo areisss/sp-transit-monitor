@@ -11,8 +11,7 @@ Uses consecutive position pairs to calculate instantaneous speed.
 import argparse
 import sys
 
-from pyspark.sql import DataFrame, SparkSession
-from pyspark.sql import Window
+from pyspark.sql import DataFrame, SparkSession, Window
 from pyspark.sql import functions as F
 from pyspark.sql.types import DateType
 
@@ -29,8 +28,7 @@ def compute_instantaneous_speed(df: DataFrame) -> DataFrame:
     window_spec = Window.partitionBy("vehicle_id").orderBy("event_ts")
 
     return (
-        df
-        .withColumn("prev_lat", F.lag("latitude").over(window_spec))
+        df.withColumn("prev_lat", F.lag("latitude").over(window_spec))
         .withColumn("prev_lng", F.lag("longitude").over(window_spec))
         .withColumn("prev_ts", F.lag("event_ts").over(window_spec))
         .filter(F.col("prev_ts").isNotNull())
@@ -66,8 +64,7 @@ def classify_congestion(speed_col: F.Column) -> F.Column:
 def aggregate_speed_metrics(speeds: DataFrame) -> DataFrame:
     """Aggregate speed by H3 hex, route, and time window."""
     return (
-        speeds
-        .withColumn("hour_of_day", extract_hour_of_day(F.col("event_ts")))
+        speeds.withColumn("hour_of_day", extract_hour_of_day(F.col("event_ts")))
         .withColumn("time_period", classify_time_period(F.col("hour_of_day")))
         .withColumn("is_weekday", is_weekday(F.col("event_ts")))
         .withColumn("_event_date", F.col("event_ts").cast(DateType()).cast("string"))
@@ -107,20 +104,12 @@ def create_speed_stream(spark: SparkSession, checkpoint_bucket: str) -> None:
         speeds = compute_instantaneous_speed(batch_df)
         metrics = aggregate_speed_metrics(speeds)
 
-        (
-            metrics.write
-            .format("delta")
-            .mode("append")
-            .partitionBy("_event_date")
-            .saveAsTable(GOLD_TABLE)
-        )
+        (metrics.write.format("delta").mode("append").partitionBy("_event_date").saveAsTable(GOLD_TABLE))
 
     (
-        spark.readStream
-        .table(SILVER_TABLE)
+        spark.readStream.table(SILVER_TABLE)
         .withWatermark("event_ts", "10 minutes")
-        .writeStream
-        .foreachBatch(process_batch)
+        .writeStream.foreachBatch(process_batch)
         .option("checkpointLocation", checkpoint_location)
         .trigger(processingTime="5 minutes")
         .start()

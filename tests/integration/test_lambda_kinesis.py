@@ -7,7 +7,6 @@ import boto3
 import pytest
 from moto import mock_aws
 
-from sptrans_producer.config import Config
 from sptrans_producer.handler import put_records_batch
 from sptrans_producer.models import VehiclePosition
 

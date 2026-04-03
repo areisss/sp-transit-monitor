@@ -3,21 +3,17 @@
 import pytest
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
-from pyspark.sql.types import StringType, StructField, StructType, TimestampType
 
 from databricks.utils.time_utils import (
     classify_time_period,
-    extract_hour_of_day,
     is_weekday,
-    to_sp_local_time,
 )
 
 
 @pytest.fixture(scope="module")
 def spark():
     session = (
-        SparkSession.builder
-        .master("local[1]")
+        SparkSession.builder.master("local[1]")
         .appName("test-time-utils")
         .config("spark.sql.session.timeZone", "UTC")
         .getOrCreate()

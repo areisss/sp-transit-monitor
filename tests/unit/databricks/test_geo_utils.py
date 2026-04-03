@@ -1,11 +1,8 @@
 """Unit tests for geo_utils module."""
 
-import math
-
 import pytest
 
 from databricks.utils.geo_utils import (
-    EARTH_RADIUS_KM,
     SP_LAT_MAX,
     SP_LAT_MIN,
     SP_LNG_MAX,

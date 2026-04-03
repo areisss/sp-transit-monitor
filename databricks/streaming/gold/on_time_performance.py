@@ -22,8 +22,8 @@ STOP_ARRIVALS_TABLE = "transit_monitor.silver.stop_arrivals"
 GTFS_STOP_TIMES_TABLE = "transit_monitor.reference.gtfs_stop_times"
 GOLD_TABLE = "transit_monitor.gold.on_time_performance"
 
-ON_TIME_EARLY_THRESHOLD_SEC = -60   # 1 minute early
-ON_TIME_LATE_THRESHOLD_SEC = 300    # 5 minutes late
+ON_TIME_EARLY_THRESHOLD_SEC = -60  # 1 minute early
+ON_TIME_LATE_THRESHOLD_SEC = 300  # 5 minutes late
 
 
 def classify_on_time(delay_seconds_col: F.Column) -> F.Column:
@@ -49,8 +49,7 @@ def compute_on_time_metrics(arrivals: DataFrame, gtfs_stop_times: DataFrame) -> 
         arrivals.alias("a")
         .join(
             scheduled.alias("s"),
-            (F.col("a.stop_id") == F.col("s.sched_stop_id"))
-            & (F.col("a.route_id") == F.col("s.sched_route_id")),
+            (F.col("a.stop_id") == F.col("s.sched_stop_id")) & (F.col("a.route_id") == F.col("s.sched_route_id")),
             "inner",
         )
         .withColumn(
@@ -65,8 +64,7 @@ def compute_on_time_metrics(arrivals: DataFrame, gtfs_stop_times: DataFrame) -> 
         .withColumn(
             "rank",
             F.row_number().over(
-                F.Window.partitionBy("a.vehicle_id", "a.stop_id", "a.arrival_time")
-                .orderBy("abs_delay")
+                F.Window.partitionBy("a.vehicle_id", "a.stop_id", "a.arrival_time").orderBy("abs_delay")
             ),
         )
         .filter(F.col("rank") == 1)
@@ -74,8 +72,7 @@ def compute_on_time_metrics(arrivals: DataFrame, gtfs_stop_times: DataFrame) -> 
     )
 
     return (
-        with_schedule
-        .withColumn("on_time_status", classify_on_time(F.col("delay_seconds")))
+        with_schedule.withColumn("on_time_status", classify_on_time(F.col("delay_seconds")))
         .withColumn("hour_of_day", extract_hour_of_day(F.col("arrival_time")))
         .withColumn("time_period", classify_time_period(F.col("hour_of_day")))
         .withColumn("is_weekday", is_weekday(F.col("arrival_time")))
@@ -86,8 +83,7 @@ def compute_on_time_metrics(arrivals: DataFrame, gtfs_stop_times: DataFrame) -> 
 def aggregate_on_time(df: DataFrame) -> DataFrame:
     """Aggregate on-time performance by route, time period, and day type."""
     return (
-        df
-        .groupBy(
+        df.groupBy(
             F.window(F.col("arrival_time"), "1 hour").alias("time_window"),
             "route_id",
             "line_code",
@@ -124,20 +120,12 @@ def create_on_time_stream(spark: SparkSession, checkpoint_bucket: str) -> None:
         metrics = compute_on_time_metrics(batch_df, gtfs_stop_times)
         aggregated = aggregate_on_time(metrics)
 
-        (
-            aggregated.write
-            .format("delta")
-            .mode("append")
-            .partitionBy("_event_date")
-            .saveAsTable(GOLD_TABLE)
-        )
+        (aggregated.write.format("delta").mode("append").partitionBy("_event_date").saveAsTable(GOLD_TABLE))
 
     (
-        spark.readStream
-        .table(STOP_ARRIVALS_TABLE)
+        spark.readStream.table(STOP_ARRIVALS_TABLE)
         .withWatermark("arrival_time", "15 minutes")
-        .writeStream
-        .foreachBatch(process_batch)
+        .writeStream.foreachBatch(process_batch)
         .option("checkpointLocation", checkpoint_location)
         .trigger(processingTime="5 minutes")
         .start()

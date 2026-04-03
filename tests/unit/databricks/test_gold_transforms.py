@@ -12,19 +12,17 @@ from pyspark.sql.types import (
     TimestampType,
 )
 
-from databricks.streaming.gold.speed_congestion import (
-    classify_congestion,
-    compute_instantaneous_speed,
-)
 from databricks.streaming.gold.headway_regularity import compute_headways
 from databricks.streaming.gold.on_time_performance import classify_on_time
+from databricks.streaming.gold.speed_congestion import (
+    classify_congestion,
+)
 
 
 @pytest.fixture(scope="module")
 def spark():
     session = (
-        SparkSession.builder
-        .master("local[1]")
+        SparkSession.builder.master("local[1]")
         .appName("test-gold-transforms")
         .config("spark.sql.session.timeZone", "UTC")
         .getOrCreate()
@@ -86,22 +84,26 @@ class TestClassifyCongestion:
 
 class TestComputeHeadways:
     def test_computes_headway_between_arrivals(self, spark):
-        schema = StructType([
-            StructField("vehicle_id", StringType()),
-            StructField("stop_id", StringType()),
-            StructField("line_code", IntegerType()),
-            StructField("route_id", StringType()),
-            StructField("arrival_time", TimestampType()),
-            StructField("latitude", DoubleType()),
-            StructField("longitude", DoubleType()),
-            StructField("distance_to_stop_m", DoubleType()),
-            StructField("_event_date", StringType()),
-        ])
+        schema = StructType(
+            [
+                StructField("vehicle_id", StringType()),
+                StructField("stop_id", StringType()),
+                StructField("line_code", IntegerType()),
+                StructField("route_id", StringType()),
+                StructField("arrival_time", TimestampType()),
+                StructField("latitude", DoubleType()),
+                StructField("longitude", DoubleType()),
+                StructField("distance_to_stop_m", DoubleType()),
+                StructField("_event_date", StringType()),
+            ]
+        )
+
+        from datetime import datetime
 
         data = [
-            ("V001", "S1", 100, "R1", "2026-03-14 08:00:00", -23.55, -46.63, 10.0, "2026-03-14"),
-            ("V002", "S1", 100, "R1", "2026-03-14 08:10:00", -23.55, -46.63, 15.0, "2026-03-14"),
-            ("V003", "S1", 100, "R1", "2026-03-14 08:20:00", -23.55, -46.63, 12.0, "2026-03-14"),
+            ("V001", "S1", 100, "R1", datetime(2026, 3, 14, 8, 0, 0), -23.55, -46.63, 10.0, "2026-03-14"),
+            ("V002", "S1", 100, "R1", datetime(2026, 3, 14, 8, 10, 0), -23.55, -46.63, 15.0, "2026-03-14"),
+            ("V003", "S1", 100, "R1", datetime(2026, 3, 14, 8, 20, 0), -23.55, -46.63, 12.0, "2026-03-14"),
         ]
 
         df = spark.createDataFrame(data, schema=schema)

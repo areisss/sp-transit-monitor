@@ -15,7 +15,7 @@ venv/
 *.tfstate
 *.tfstate.*
 *.tfplan
-.terraform.lock.hcl
+# .terraform.lock.hcl is committed (Terraform best practice)
 crash.log
 
 # Lambda packaging

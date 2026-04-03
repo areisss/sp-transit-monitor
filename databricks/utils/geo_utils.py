@@ -63,9 +63,4 @@ def haversine_udf(lat1: float, lon1: float, lat2: float, lon2: float) -> float |
 
 def is_within_sp_bounds(lat_col: Column, lng_col: Column) -> Column:
     """Return a boolean Column filtering to Sao Paulo metro area bounds."""
-    return (
-        (lat_col >= SP_LAT_MIN)
-        & (lat_col <= SP_LAT_MAX)
-        & (lng_col >= SP_LNG_MIN)
-        & (lng_col <= SP_LNG_MAX)
-    )
+    return (lat_col >= SP_LAT_MIN) & (lat_col <= SP_LAT_MAX) & (lng_col >= SP_LNG_MIN) & (lng_col <= SP_LNG_MAX)
